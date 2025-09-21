@@ -9,12 +9,21 @@
 - Интерактивные графики
 - Темная/светлая тема
 
+## Установка зависимостей
+
+### Python (бэкенд)
+```sh
+pip install flask pandas scikit-learn
+```
+
+### Node.js (фронтенд)
+```sh
+npm install
+```
+
 ## Запуск
 
 ```sh
-# Установка зависимостей
-npm install
-
 # Запуск фронтенда
 npm run dev
 
