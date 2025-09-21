@@ -1,0 +1,107 @@
+@import "./base.css";
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-weight: normal;
+}
+
+a,
+.green {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.4s;
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  a:hover {
+    background-color: hsla(160, 100%, 37%, 0.2);
+  }
+}
+
+@media (min-width: 1024px) {
+  body {
+    display: flex;
+    place-items: center;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 0 2rem;
+  }
+}
+
+.dark .p-datatable .p-datatable-tbody tr td {
+  color: #e5e7eb !important;
+}
+
+.dark .p-datatable .p-datatable-thead tr th {
+  color: #e5e7eb !important;
+}
+
+.dark .p-datatable .p-datatable-tbody tr {
+  color: #e5e7eb !important;
+}
+
+.dark .p-datatable .p-datatable-tbody tr * {
+  color: #e5e7eb !important;
+}
+
+.dark .p-datatable .p-datatable-thead tr * {
+  color: #e5e7eb !important;
+}
+
+.dark .p-card * {
+  color: #e5e7eb !important;
+}
+
+.dark .p-card .p-card-title {
+  color: #e5e7eb !important;
+}
+
+.dark .p-card .p-card-content {
+  color: #e5e7eb !important;
+}
+
+.dark .p-card .p-card-content * {
+  color: #e5e7eb !important;
+}
+
+.dark .p-datatable .p-datatable-header {
+  background: #374151 !important;
+  color: #e5e7eb !important;
+  border-color: #6b7280 !important;
+}
+
+.dark .p-datatable .p-datatable-tbody > tr {
+  background: #1f2937 !important;
+  color: #e5e7eb !important;
+}
+
+.dark .p-datatable .p-datatable-tbody > tr:nth-child(even) {
+  background: #374151 !important;
+}
+
+.dark .p-datatable .p-datatable-tbody > tr:hover {
+  background: #4b5563 !important;
+}
+
+.dark .p-datatable .p-datatable-thead > tr > th {
+  background: #374151 !important;
+  color: #e5e7eb !important;
+  border-color: #6b7280 !important;
+}
+
+.dark .p-datatable .p-datatable-tbody > tr > td {
+  border-color: #6b7280 !important;
+  color: #e5e7eb !important;
+}
+
+.dark .p-card {
+  background: #1f2937 !important;
+  color: #e5e7eb !important;
+  border-color: #6b7280 !important;
+}

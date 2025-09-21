@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DataVue - Анализ данных о недвижимости</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#10b981",
+              secondary: "#3b82f6",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      .dark .p-datatable .p-datatable-tbody tr td {
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-datatable .p-datatable-thead tr th {
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-datatable .p-datatable-tbody tr {
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-datatable .p-datatable-tbody tr * {
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-datatable .p-datatable-thead tr * {
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-card * {
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-card .p-card-title {
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-card .p-card-content {
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-card .p-card-content * {
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-datatable .p-datatable-header {
+        background: #374151 !important;
+        color: #e5e7eb !important;
+        border-color: #6b7280 !important;
+      }
+
+      .dark .p-datatable .p-datatable-tbody > tr {
+        background: #1f2937 !important;
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-datatable .p-datatable-tbody > tr:nth-child(even) {
+        background: #374151 !important;
+      }
+
+      .dark .p-datatable .p-datatable-tbody > tr:hover {
+        background: #4b5563 !important;
+      }
+
+      .dark .p-datatable .p-datatable-thead > tr > th {
+        background: #374151 !important;
+        color: #e5e7eb !important;
+        border-color: #6b7280 !important;
+      }
+
+      .dark .p-datatable .p-datatable-tbody > tr > td {
+        border-color: #6b7280 !important;
+        color: #e5e7eb !important;
+      }
+
+      .dark .p-card {
+        background: #1f2937 !important;
+        color: #e5e7eb !important;
+        border-color: #6b7280 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
