@@ -134,6 +134,53 @@ const goToNextPage = () => {
 	goToPage(Math.min(totalPages.value, currentPage.value + 1));
 };
 
+const goToFirstPage = () => {
+	goToPage(1);
+};
+
+const goToLastPage = () => {
+	goToPage(totalPages.value);
+};
+
+const getPageNumbers = () => {
+	const total = totalPages.value;
+	const current = currentPage.value;
+	const pages = [];
+	
+	if (total <= 7) {
+		// Показываем все страницы если их мало
+		for (let i = 1; i <= total; i++) {
+			pages.push(i);
+		}
+	} else {
+		// Показываем умную пагинацию
+		if (current <= 4) {
+			// В начале: 1, 2, 3, 4, 5, ..., последняя
+			pages.push(1, 2, 3, 4, 5);
+			pages.push('...');
+			pages.push(total);
+		} else if (current >= total - 3) {
+			// В конце: 1, ..., предпоследние, последние
+			pages.push(1);
+			pages.push('...');
+			for (let i = total - 4; i <= total; i++) {
+				pages.push(i);
+			}
+		} else {
+			// В середине: 1, ..., текущие, ..., последняя
+			pages.push(1);
+			pages.push('...');
+			for (let i = current - 1; i <= current + 1; i++) {
+				pages.push(i);
+			}
+			pages.push('...');
+			pages.push(total);
+		}
+	}
+	
+	return pages;
+};
+
 </script>
 
 <template>
@@ -190,33 +237,76 @@ const goToNextPage = () => {
 		</div>
 
 		<div
-			class="p-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-700 flex flex-wrap justify-between items-center text-sm text-gray-600 dark:text-gray-300">
+			class="p-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-700 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
+			<!-- Информация о записях и сортировке -->
 			<div class="flex flex-col sm:flex-row gap-2 sm:gap-4">
-				<span>Всего записей: {{ filteredData.length }}</span>
+				<span>Показано {{ (currentPage - 1) * rowsPerPage + 1 }}-{{ Math.min(currentPage * rowsPerPage, filteredData.length) }} из {{ filteredData.length }} записей</span>
 				<span v-if="sortField" class="text-blue-600 dark:text-blue-400">
 					Сортировка: {{ getRussianName(sortField) }} {{ sortOrder === 1 ? '↑' : '↓' }}
 				</span>
 			</div>
-			<div class="mt-2 sm:mt-0 flex items-center gap-2">
-				<span>Строк на странице:</span>
-				<select v-model="rowsPerPage"
-					class="w-20 p-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200">
-					<option value="5">5</option>
-					<option value="10">10</option>
-					<option value="20">20</option>
-					<option value="50">50</option>
-				</select>
-				<div class="flex gap-1 items-center">
+			
+			<!-- Элементы управления пагинацией -->
+			<div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full lg:w-auto">
+				<!-- Выбор количества строк на странице -->
+				<div class="flex items-center gap-2">
+					<span>Строк на странице:</span>
+					<select v-model="rowsPerPage"
+						class="w-20 p-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm">
+						<option value="5">5</option>
+						<option value="10">10</option>
+						<option value="20">20</option>
+						<option value="50">50</option>
+						<option value="100">100</option>
+					</select>
+				</div>
+				
+				<!-- Навигация по страницам -->
+				<div class="flex items-center gap-1">
+					<!-- Первая страница -->
+					<button @click="goToFirstPage" :disabled="currentPage === 1"
+						class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-600 text-sm"
+						title="Первая страница">
+						⏮
+					</button>
+					
+					<!-- Предыдущая страница -->
 					<button @click="goToPreviousPage" :disabled="currentPage === 1"
-						class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-600"
+						class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-600 text-sm"
 						title="Предыдущая страница">
 						←
 					</button>
-					<span class="px-2 py-1">{{ currentPage }} из {{ totalPages }}</span>
+					
+					<!-- Номера страниц -->
+					<div class="flex gap-1">
+						<button v-for="page in getPageNumbers()" :key="page"
+							@click="page !== '...' && goToPage(page)"
+							:disabled="page === '...'"
+							:class="[
+								'px-3 py-1 text-sm border rounded transition-colors',
+								page === currentPage 
+									? 'bg-blue-500 text-white border-blue-500' 
+									: page === '...'
+									? 'border-transparent cursor-default text-gray-400'
+									: 'border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
+							]"
+							:title="page === '...' ? '' : `Страница ${page}`">
+							{{ page }}
+						</button>
+					</div>
+					
+					<!-- Следующая страница -->
 					<button @click="goToNextPage" :disabled="currentPage === totalPages"
-						class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-600"
+						class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-600 text-sm"
 						title="Следующая страница">
 						→
+					</button>
+					
+					<!-- Последняя страница -->
+					<button @click="goToLastPage" :disabled="currentPage === totalPages"
+						class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-600 text-sm"
+						title="Последняя страница">
+						⏭
 					</button>
 				</div>
 			</div>

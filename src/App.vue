@@ -1,393 +1,409 @@
-<script setup>
-import { ref, onMounted } from 'vue';
-import DataService from './services/DataService.js';
-import DataTable from './components/DataTable.vue';
-import DataStats from './components/DataStats.vue';
-import DataCharts from './components/DataCharts.vue';
-
-const activeTab = ref('table');
-const loading = ref(true);
-const data = ref([]);
-const stats = ref(null);
-const features = ref([]);
-const menuItems = ref([
-	{
-		label: 'Таблица данных',
-		icon: 'pi pi-table',
-		command: () => setActiveTab('table'),
-		class: activeTab.value === 'table' ? 'active-tab' : ''
-	},
-	{
-		label: 'Статистика',
-		icon: 'pi pi-chart-bar',
-		command: () => setActiveTab('stats'),
-		class: activeTab.value === 'stats' ? 'active-tab' : ''
-	},
-	{
-		label: 'Графики',
-		icon: 'pi pi-chart-line',
-		command: () => setActiveTab('charts'),
-		class: activeTab.value === 'charts' ? 'active-tab' : ''
-	}
-]);
-const darkMode = ref(false);
-
-onMounted(async () => {
-	try {
-		data.value = await DataService.getData();
-
-		stats.value = await DataService.getStats();
-
-		features.value = await DataService.getFeatures();
-
-		loading.value = false;
-	} catch (error) {
-		loading.value = false;
-	}
-});
-
-const setActiveTab = (tab) => {
-	activeTab.value = tab;
-	menuItems.value.forEach(item => {
-		item.class = item.label.toLowerCase().includes(tab) ? 'active-tab' : '';
-	});
-};
-
-const toggleDarkMode = () => {
-	darkMode.value = !darkMode.value;
-	document.documentElement.classList.toggle('dark', darkMode.value);
-
-	if (darkMode.value) {
-		setTimeout(() => {
-			const tables = document.querySelectorAll('.p-datatable');
-			tables.forEach(table => {
-				const cells = table.querySelectorAll('td, th');
-				cells.forEach(cell => {
-					cell.style.color = '#e5e7eb';
-				});
-			});
-
-			const cards = document.querySelectorAll('.p-card');
-			cards.forEach(card => {
-				const elements = card.querySelectorAll('*');
-				elements.forEach(el => {
-					el.style.color = '#e5e7eb';
-				});
-			});
-		}, 100);
-	}
-};
-</script>
-
 <template>
-	<div class="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900" :class="{ 'dark': darkMode }">
-		<Toast position="top-right" />
-
-		<nav class="bg-white dark:bg-gray-800 shadow-md">
+  <div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+    <!-- Навигационная панель -->
+    <nav class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
 			<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 				<div class="flex justify-between h-16">
 					<div class="flex items-center">
-						<div class="flex-shrink-0 flex items-center">
-							<i class="pi pi-chart-line text-green-600 dark:text-green-400 text-2xl mr-2"></i>
-							<span class="font-bold text-xl text-green-600 dark:text-green-400">DataVue</span>
+            <h1 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
+              DataVue
+            </h1>
+          </div>
+          
+          <div class="flex items-center space-x-2 sm:space-x-4">
+            <!-- Переключатель темы -->
+            <button
+              @click="toggleDarkMode"
+              class="p-2 rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              <svg v-if="!darkMode" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+              </svg>
+              <svg v-else class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+              </svg>
+            </button>
+            
+            <!-- Информация о пользователе -->
+            <div v-if="currentUser" class="flex items-center space-x-2 sm:space-x-3">
+              <div class="hidden sm:block">
+                <span class="text-sm text-gray-700 dark:text-gray-300">
+                  {{ currentUser.username }}
+                  <span class="ml-1 px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">
+                    {{ currentUser.role === 'admin' ? 'Админ' : 'Пользователь' }}
+                  </span>
+                </span>
 						</div>
+              <div class="sm:hidden">
+                <span class="text-sm text-gray-700 dark:text-gray-300">
+                  {{ currentUser.username }}
+                </span>
 					</div>
-					<div class="flex items-center space-x-4">
-						<button @click="toggleDarkMode"
-							class="p-2 rounded-full text-gray-500 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none">
-							<i :class="darkMode ? 'pi pi-moon' : 'pi pi-sun'" class="text-lg"></i>
+              <button
+                @click="logout"
+                class="text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900"
+              >
+                Выйти
 						</button>
+            </div>
 					</div>
 				</div>
 			</div>
 		</nav>
 
-		<main class="flex-grow">
-			<div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-				<div class="px-4 py-6 sm:px-0">
-					<div class="bg-white dark:bg-gray-800 overflow-hidden shadow-md rounded-lg mb-6">
-						<div class="px-4 py-5 sm:p-6">
-							<h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-								Анализ данных о недвижимости Калифорнии
-							</h1>
+    <!-- Основной контент -->
+    <main class="max-w-7xl mx-auto py-4 px-2 sm:px-4 lg:px-8">
+      <!-- Форма настройки администратора -->
+      <div v-if="!currentUser && !adminSetup" class="max-w-md mx-auto">
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+            Настройка администратора
+          </h2>
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-6 text-center">
+            Настройте учетные данные администратора для первого входа в систему
+          </p>
+          
+          <form @submit.prevent="setupAdmin" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Имя пользователя
+              </label>
+              <input
+                v-model="adminForm.username"
+                type="text"
+                required
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                placeholder="Введите имя пользователя"
+              >
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Пароль
+              </label>
+              <input
+                v-model="adminForm.password"
+                type="password"
+                required
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                placeholder="Введите пароль"
+              >
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Полное имя (необязательно)
+              </label>
+              <input
+                v-model="adminForm.full_name"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                placeholder="Введите полное имя"
+              >
+            </div>
+            
+            <div v-if="error" class="mt-4 p-3 bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-200 rounded">
+              {{ error }}
+            </div>
+            
+            <button
+              type="submit"
+              :disabled="loading"
+              class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {{ loading ? 'Создание...' : 'Создать администратора' }}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Форма входа -->
+      <div v-if="!currentUser && adminSetup" class="max-w-md mx-auto">
+        <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+            Вход в систему
+          </h2>
+          
+          <form @submit.prevent="login" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Имя пользователя
+              </label>
+              <input
+                v-model="loginForm.username"
+                type="text"
+                required
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                placeholder="Введите имя пользователя"
+              >
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Пароль
+              </label>
+              <input
+                v-model="loginForm.password"
+                type="password"
+                required
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                placeholder="Введите пароль"
+              >
+            </div>
+            
+            <button
+              type="submit"
+              :disabled="loading"
+              class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {{ loading ? 'Вход...' : 'Войти' }}
+            </button>
+          </form>
+          
+          <div v-if="error" class="mt-4 p-3 bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-200 rounded">
+            {{ error }}
+          </div>
+          
 						</div>
 					</div>
-					<div class="bg-white dark:bg-gray-800 shadow-md rounded-lg mb-6">
-						<div class="border-b border-gray-200 dark:border-gray-700">
-							<nav class="flex -mb-px">
-								<button @click="setActiveTab('table')" :class="[
-									activeTab === 'table'
-										? 'border-green-500 text-green-600 dark:text-green-400'
-										: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300',
-									'group inline-flex items-center py-4 px-6 border-b-2 font-medium text-sm'
-								]">
-									<i class="pi pi-table mr-2"></i>
-									Таблица данных
-								</button>
-								<button @click="setActiveTab('stats')" :class="[
-									activeTab === 'stats'
-										? 'border-green-500 text-green-600 dark:text-green-400'
-										: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300',
-									'group inline-flex items-center py-4 px-6 border-b-2 font-medium text-sm'
-								]">
-									<i class="pi pi-chart-bar mr-2"></i>
-									Статистика
-								</button>
-								<button @click="setActiveTab('charts')" :class="[
-									activeTab === 'charts'
-										? 'border-green-500 text-green-600 dark:text-green-400'
-										: 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300',
-									'group inline-flex items-center py-4 px-6 border-b-2 font-medium text-sm'
-								]">
-									<i class="pi pi-chart-line mr-2"></i>
-									Графики
+
+      <!-- Интерфейс приложения -->
+      <div v-else>
+        <!-- Вкладки -->
+        <div class="border-b border-gray-200 dark:border-gray-700 mb-4 sm:mb-6">
+          <nav class="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto">
+            <button
+              v-for="tab in availableTabs"
+              :key="tab.id"
+              @click="activeTab = tab.id"
+              :class="[
+                activeTab === tab.id
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300',
+                'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex-shrink-0'
+              ]"
+            >
+              {{ tab.name }}
 								</button>
 							</nav>
 						</div>
+
+        <!-- Контент вкладок -->
+        <div v-if="activeTab === 'data'" class="space-y-6">
+          <DataManagement />
 					</div>
-					<div class="bg-white dark:bg-gray-800 overflow-hidden shadow-md rounded-lg">
-						<div class="px-4 py-5 sm:p-6">
-							<div v-if="loading" class="flex justify-center py-12">
-								<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-							</div>
-							<div v-else>
-								<DataTable v-if="activeTab === 'table' && data && data.length > 0" :data="data"
-									:features="features" />
-								<DataStats v-if="activeTab === 'stats' && stats" :stats="stats" :features="features" />
-								<DataCharts v-if="activeTab === 'charts' && data && data.length > 0" :data="data"
-									:features="features" />
-								<div v-if="!loading && (!data || data.length === 0)"
-									class="text-center py-12 text-gray-500">
-									<p>Данные не загружены</p>
-								</div>
-							</div>
-						</div>
+        
+        <div v-if="activeTab === 'analysis'" class="space-y-6">
+          <AnalysisPanel />
+					</div>
+        
+        <div v-if="activeTab === 'admin'" class="space-y-6">
+          <AdminPanel v-if="currentUser.role === 'admin'" />
+          <div v-else class="text-center py-8 text-gray-500 dark:text-gray-400">
+            У вас нет прав доступа к панели администратора
 					</div>
 				</div>
 			</div>
 		</main>
+    
+    <!-- Система уведомлений -->
+    <NotificationSystem />
+    
+    <!-- Система модальных окон -->
+    <ModalSystem />
 	</div>
 </template>
 
-<style>
-:deep(.p-component) {
-	font-family: sans-serif;
-}
+<script>
+import { ref, onMounted, computed } from 'vue'
+import DataManagement from './components/DataManagement.vue'
+import AdminPanel from './components/AdminPanel.vue'
+import AnalysisPanel from './components/AnalysisPanel.vue'
+import NotificationSystem from './components/NotificationSystem.vue'
+import ModalSystem from './components/ModalSystem.vue'
 
-:deep(.p-datatable) {
-	border-radius: 0.5rem;
-	overflow: hidden;
+export default {
+  name: 'App',
+  components: {
+    DataManagement,
+    AdminPanel,
+    AnalysisPanel,
+    NotificationSystem,
+    ModalSystem
+  },
+  setup() {
+    const currentUser = ref(null)
+    const loading = ref(false)
+    const error = ref('')
+    const activeTab = ref('analysis')
+    const darkMode = ref(false)
+    const adminSetup = ref(true) // По умолчанию считаем, что админ настроен
+    
+    const loginForm = ref({
+      username: '',
+      password: ''
+    })
+    
+    const adminForm = ref({
+      username: '',
+      password: '',
+      full_name: ''
+    })
+    
+    const availableTabs = computed(() => {
+      const tabs = [
+        { id: 'analysis', name: 'Анализ' },
+        { id: 'data', name: 'Данные' }
+      ]
+      
+      if (currentUser.value?.role === 'admin') {
+        tabs.push({ id: 'admin', name: 'Администрирование' })
+      }
+      
+      return tabs
+    })
+    
+    const login = async () => {
+      loading.value = true
+      error.value = ''
+      
+      try {
+        const response = await fetch('http://localhost:5000/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(loginForm.value)
+        })
+        
+        const data = await response.json()
+        
+        if (response.ok) {
+          currentUser.value = data.user
+          activeTab.value = 'data'
+        } else {
+          error.value = data.error || 'Ошибка входа'
+          window.$notify?.error('Ошибка входа', data.error || 'Неверные учетные данные')
+        }
+      } catch (err) {
+        error.value = 'Ошибка соединения с сервером'
+        window.$notify?.error('Ошибка соединения', 'Не удалось подключиться к серверу')
+      } finally {
+        loading.value = false
+      }
+    }
+    
+    const setupAdmin = async () => {
+      loading.value = true
+      error.value = ''
+      
+      try {
+        const response = await fetch('http://localhost:5000/api/admin/setup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(adminForm.value)
+        })
+        
+        const data = await response.json()
+        
+        if (response.ok) {
+          adminSetup.value = true
+          // Автоматически входим после создания администратора
+          loginForm.value.username = adminForm.value.username
+          loginForm.value.password = adminForm.value.password
+          await login()
+        } else {
+          error.value = data.error || 'Ошибка создания администратора'
+        }
+      } catch (err) {
+        console.error('Ошибка создания администратора:', err)
+        error.value = 'Ошибка соединения с сервером'
+      } finally {
+        loading.value = false
+      }
+    }
+    
+    const checkAdminSetup = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/admin/check-setup', {
+          credentials: 'include'
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          adminSetup.value = data.is_setup
+        }
+      } catch (err) {
+        console.error('Ошибка проверки настройки администратора:', err)
+      }
+    }
+    
+    const logout = async () => {
+      try {
+        await fetch('http://localhost:5000/api/auth/logout', {
+          method: 'POST',
+          credentials: 'include'
+        })
+      } catch (err) {
+        console.error('Ошибка выхода:', err)
+      } finally {
+        currentUser.value = null
+        activeTab.value = 'data'
+      }
+    }
+    
+    const toggleDarkMode = () => {
+      darkMode.value = !darkMode.value
+      document.documentElement.classList.toggle('dark', darkMode.value)
+    }
+    
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/auth/me', {
+          credentials: 'include'
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          currentUser.value = data
+        }
+      } catch (err) {
+        console.error('Ошибка проверки аутентификации:', err)
+      }
+    }
+    
+    onMounted(async () => {
+      await checkAdminSetup()
+      checkAuth()
+      
+      // Проверяем сохраненную тему
+      const savedTheme = localStorage.getItem('darkMode')
+      if (savedTheme === 'true') {
+        darkMode.value = true
+        document.documentElement.classList.add('dark')
+      }
+    })
+    
+    return {
+      currentUser,
+      loading,
+      error,
+      activeTab,
+      darkMode,
+      adminSetup,
+      loginForm,
+      adminForm,
+      availableTabs,
+      login,
+      logout,
+      setupAdmin,
+      checkAdminSetup,
+      toggleDarkMode
+    }
+  }
 }
-
-:deep(.p-datatable .p-datatable-header) {
-	background-color: #f9fafb;
-	border-bottom: 1px solid #e5e7eb;
-	padding: 1rem;
-}
-
-:deep(.p-datatable .p-datatable-thead > tr > th) {
-	background-color: #f3f4f6;
-	color: #374151;
-	border-bottom: 1px solid #e5e7eb;
-	padding: 0.75rem;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr) {
-	border-bottom: 1px solid #e5e7eb;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr > td) {
-	padding: 0.75rem;
-	color: #4b5563;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr:nth-child(even)) {
-	background-color: #f9fafb;
-}
-
-:deep(.p-datatable .p-datatable-tbody > tr:hover) {
-	background-color: #f3f4f6;
-}
-
-:deep(.p-paginator) {
-	background-color: white;
-	border-top: 1px solid #e5e7eb;
-	padding: 0.75rem;
-}
-
-:deep(.p-paginator .p-paginator-pages .p-paginator-page.p-highlight) {
-	background-color: #10b981;
-	color: white;
-}
-
-:deep(.p-dropdown-panel) {
-	background-color: white;
-	box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-	border: 1px solid #e5e7eb;
-	border-radius: 0.375rem;
-}
-
-:deep(.p-dropdown-panel .p-dropdown-items .p-dropdown-item) {
-	color: #374151;
-}
-
-:deep(.p-dropdown-panel .p-dropdown-items .p-dropdown-item:hover) {
-	background-color: #f3f4f6;
-}
-
-:deep(.p-dropdown-panel .p-dropdown-items .p-dropdown-item.p-highlight) {
-	background-color: #10b981;
-	color: white;
-}
-
-:deep(.p-progressspinner) {
-	color: #10b981;
-}
-
-:deep(.p-toast) {
-	opacity: 0.95;
-}
-
-:deep(.p-toast .p-toast-message) {
-	border-radius: 0.5rem;
-	box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-}
-
-:deep(.p-toast .p-toast-message-success) {
-	background-color: #ecfdf5;
-	border-left: 4px solid #10b981;
-}
-
-:deep(.p-toast .p-toast-message-info) {
-	background-color: #eff6ff;
-	border-left: 4px solid #3b82f6;
-}
-
-:deep(.p-toast .p-toast-message-warn) {
-	background-color: #fffbeb;
-	border-left: 4px solid #f59e0b;
-}
-
-:deep(.p-toast .p-toast-message-error) {
-	background-color: #fef2f2;
-	border-left: 4px solid #ef4444;
-}
-
-.dark :deep(.p-component) {
-	color: #e5e7eb;
-}
-
-.highlight {
-	font-weight: bold;
-	color: #10b981;
-}
-
-.dark-mode-transition {
-	transition: color 0.2s, background-color 0.2s;
-}
-
-.dark :deep(.p-datatable .p-datatable-header) {
-	background-color: #374151;
-	border-bottom: 1px solid #4b5563;
-}
-
-.dark :deep(.p-datatable .p-datatable-thead > tr > th) {
-	background-color: #374151;
-	color: #e5e7eb;
-	border-bottom: 1px solid #4b5563;
-}
-
-.dark :deep(.p-datatable .p-datatable-tbody > tr) {
-	border-bottom: 1px solid #4b5563;
-}
-
-.dark :deep(.p-datatable .p-datatable-tbody > tr > td) {
-	color: #d1d5db;
-}
-
-.dark :deep(.p-datatable .p-datatable-tbody > tr:nth-child(even)) {
-	background-color: #1f2937;
-}
-
-.dark :deep(.p-datatable .p-datatable-tbody > tr:hover) {
-	background-color: #374151;
-}
-
-.dark :deep(.p-paginator) {
-	background-color: #1f2937;
-	border-top: 1px solid #4b5563;
-}
-
-.dark :deep(.p-dropdown-panel) {
-	background-color: #1f2937;
-	border: 1px solid #4b5563;
-}
-
-.dark :deep(.p-dropdown-panel .p-dropdown-items .p-dropdown-item) {
-	color: #d1d5db;
-}
-
-.dark :deep(.p-dropdown-panel .p-dropdown-items .p-dropdown-item:hover) {
-	background-color: #374151;
-}
-
-.dark .highlight {
-	color: #34d399;
-}
-
-.dark :deep(.p-toast .p-toast-message-success) {
-	background-color: #064e3b;
-	border-left: 4px solid #10b981;
-}
-
-.dark :deep(.p-toast .p-toast-message-info) {
-	background-color: #1e3a8a;
-	border-left: 4px solid #3b82f6;
-}
-
-.dark :deep(.p-toast .p-toast-message-warn) {
-	background-color: #78350f;
-	border-left: 4px solid #f59e0b;
-}
-
-.dark :deep(.p-toast .p-toast-message-error) {
-	background-color: #7f1d1d;
-	border-left: 4px solid #ef4444;
-}
-
-.dark :deep(.p-datatable .p-datatable-tbody tr td) {
-	color: #e5e7eb !important;
-}
-
-.dark :deep(.p-datatable .p-datatable-thead tr th) {
-	color: #e5e7eb !important;
-}
-
-.dark :deep(.p-datatable .p-datatable-tbody tr) {
-	color: #e5e7eb !important;
-}
-
-.dark :deep(.p-datatable .p-datatable-tbody tr *) {
-	color: #e5e7eb !important;
-}
-
-.dark :deep(.p-datatable .p-datatable-thead tr *) {
-	color: #e5e7eb !important;
-}
-
-.dark :deep(.p-card *) {
-	color: #e5e7eb !important;
-}
-
-.dark :deep(.p-card .p-card-title) {
-	color: #e5e7eb !important;
-}
-
-.dark :deep(.p-card .p-card-content) {
-	color: #e5e7eb !important;
-}
-
-.dark :deep(.p-card .p-card-content *) {
-	color: #e5e7eb !important;
-}
-</style>
+</script>
