@@ -28,3 +28,10 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+__pycache__
+
+# SQLite database files
+*.db-wal
+*.db-shm
+*.db-journal
+.env
