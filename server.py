@@ -6,16 +6,17 @@ import sqlite3
 from datetime import datetime
 import csv
 import io
+import json
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from database import DatabaseManager
 
 app = Flask(__name__)
-# В продакшене используйте случайный ключ
+
 app.secret_key = 'your-secret-key-here'
 CORS(app, supports_credentials=True)
 
-# Инициализация базы данных
+
 db = DatabaseManager()
 
 
@@ -26,9 +27,9 @@ def format_datetime(dt_string):
         return ""
 
     try:
-        # Парсим время из базы данных
+        
         dt = datetime.strptime(dt_string, '%Y-%m-%d %H:%M:%S')
-        # Возвращаем в ISO формате для корректного парсинга в JavaScript
+        
         return dt.isoformat()
     except (ValueError, TypeError):
         return dt_string
@@ -123,7 +124,7 @@ def get_current_user():
         'role': session['role']
     })
 
-# API для управления типами данных (справочниками)
+
 
 
 @app.route('/api/data-types', methods=['GET'])
@@ -167,7 +168,7 @@ def create_data_type():
 
 def get_data_fields(data_type_id):
     """Получение полей типа данных."""
-    # Проверяем права на чтение
+    
     if not db.has_permission(session['user_id'], data_type_id, 'read'):
         return jsonify({'error': 'Недостаточно прав для просмотра полей'}), 403
 
@@ -182,7 +183,7 @@ def get_data_fields(data_type_id):
 
 def check_data_type_has_fields(data_type_id):
     """Проверка наличия полей у типа данных."""
-    # Проверяем права на чтение
+    
     if not db.has_permission(session['user_id'], data_type_id, 'read'):
         return jsonify({'error': 'Недостаточно прав для просмотра полей'}), 403
 
@@ -207,7 +208,7 @@ def add_data_field(data_type_id):
     if not field_name or not field_type:
         return jsonify({'error': 'Название и тип поля обязательны'}), 400
 
-    if field_type not in ['text', 'integer', 'decimal', 'date', 'boolean']:
+    if field_type not in ['text', 'integer', 'decimal', 'date', 'boolean', 'enum', 'coordinates']:
         return jsonify({'error': 'Недопустимый тип поля'}), 400
 
     try:
@@ -215,6 +216,24 @@ def add_data_field(data_type_id):
             data_type_id, field_name, field_type,
             is_required, description, validation_rules
         )
+        
+        
+        if field_type == 'enum':
+            enum_values = data.get('enum_values', [])
+            if not enum_values or len(enum_values) == 0:
+                return jsonify({'error': 'Для типа enum необходимо указать хотя бы одно значение'}), 400
+            
+            
+            fields = db.get_data_fields(data_type_id)
+            enum_field = None
+            for field in fields:
+                if field['field_name'] == field_name and field['field_type'] == 'enum':
+                    enum_field = field
+                    break
+            
+            if enum_field:
+                db.add_enum_values(enum_field['id'], enum_values)
+        
         return jsonify({
             'message': 'Поле добавлено'
         })
@@ -227,6 +246,60 @@ def add_data_field(data_type_id):
             return jsonify({'error': f'Ошибка базы данных: {str(e)}'}), 500
     except Exception as e:
         return jsonify({'error': f'Неожиданная ошибка: {str(e)}'}), 500
+
+
+
+@app.route('/api/data-types/<int:data_type_id>/fields/<int:field_id>/enum-values', methods=['GET'])
+@login_required
+
+
+def get_enum_values(data_type_id, field_id):
+    """Получение значений enum поля"""
+    try:
+        
+        fields = db.get_data_fields(data_type_id)
+        field = next((f for f in fields if f['id'] == field_id), None)
+        
+        if not field:
+            return jsonify({'error': 'Поле не найдено'}), 404
+        
+        if field['field_type'] != 'enum':
+            return jsonify({'error': 'Поле не является enum типом'}), 400
+        
+        values = db.get_enum_values(field_id)
+        return jsonify({'values': values})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
+@app.route('/api/data-types/<int:data_type_id>/fields/<int:field_id>/enum-values', methods=['POST'])
+@admin_required
+
+
+def update_enum_values(data_type_id, field_id):
+    """Обновление значений enum поля"""
+    try:
+        
+        fields = db.get_data_fields(data_type_id)
+        field = next((f for f in fields if f['id'] == field_id), None)
+        
+        if not field:
+            return jsonify({'error': 'Поле не найдено'}), 404
+        
+        if field['field_type'] != 'enum':
+            return jsonify({'error': 'Поле не является enum типом'}), 400
+        
+        data = request.get_json()
+        enum_values = data.get('values', [])
+        
+        if not enum_values or len(enum_values) == 0:
+            return jsonify({'error': 'Необходимо указать хотя бы одно значение'}), 400
+        
+        db.add_enum_values(field_id, enum_values)
+        return jsonify({'message': 'Значения enum обновлены'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 
@@ -259,7 +332,7 @@ def delete_data_field(data_type_id, field_id):
 
 def delete_data_type(data_type_id):
     """Удаление типа данных."""
-    # Проверяем права администратора на тип данных
+    
     if not db.has_permission(session['user_id'], data_type_id, 'admin'):
         return jsonify({'error': 'Недостаточно прав для удаления типа данных'}), 403
 
@@ -278,7 +351,7 @@ def delete_data_type(data_type_id):
     except Exception as e:
         return jsonify({'error': f'Неожиданная ошибка: {str(e)}'}), 500
 
-# API для работы с данными
+
 
 
 @app.route('/api/data/<int:data_type_id>', methods=['GET'])
@@ -287,13 +360,13 @@ def delete_data_type(data_type_id):
 
 def get_data(data_type_id):
     """Получение записей данных."""
-    # Проверяем права на чтение
+    
     if not db.has_permission(session['user_id'], data_type_id, 'read'):
         return jsonify({
             'error': 'Недостаточно прав для просмотра данных'
         }), 403
 
-    # 0 означает все записи
+    
     limit = request.args.get('limit', 0, type=int)
     offset = request.args.get('offset', 0, type=int)
 
@@ -308,13 +381,47 @@ def get_data(data_type_id):
 
 def insert_data(data_type_id):
     """Добавление записи данных."""
-    # Проверяем права на запись
+    
     if not db.has_permission(session['user_id'], data_type_id, 'write'):
         return jsonify({'error': 'Недостаточно прав для добавления данных'}), 403
 
     data = request.get_json()
 
     try:
+        
+        fields = db.get_data_fields(data_type_id)
+        for field in fields:
+            if field['field_type'] == 'coordinates':
+                field_name = field['field_name']
+                if field_name in data:
+                    coords = data[field_name]
+                    
+                    if isinstance(coords, dict):
+                        lat = coords.get('latitude')
+                        lng = coords.get('longitude')
+                        if lat is not None and (lat < -90 or lat > 90):
+                            return jsonify({'error': f'Широта должна быть от -90 до 90 градусов (получено: {lat})'}), 400
+                        if lng is not None and (lng < -180 or lng > 180):
+                            return jsonify({'error': f'Долгота должна быть от -180 до 180 градусов (получено: {lng})'}), 400
+                        
+                        data[field_name] = json.dumps(coords) if (lat is not None or lng is not None) else None
+                    elif isinstance(coords, str):
+                        
+                        try:
+                            coords_dict = json.loads(coords)
+                            lat = coords_dict.get('latitude')
+                            lng = coords_dict.get('longitude')
+                            if lat is not None and (lat < -90 or lat > 90):
+                                return jsonify({
+                                    'error': 'Широта должна быть от -90 до 90 градусов'
+                                }), 400
+                            if lng is not None and (lng < -180 or lng > 180):
+                                return jsonify({
+                                    'error': 'Долгота должна быть от -180 до 180 градусов'
+                                }), 400
+                        except (json.JSONDecodeError, ValueError):
+                            return jsonify({'error': 'Неверный формат координат'}), 400
+        
         record_id = db.insert_data_record(data_type_id, data, session['user_id'])
         return jsonify({
             'message': 'Запись добавлена',
@@ -325,20 +432,120 @@ def insert_data(data_type_id):
 
 
 
+@app.route('/api/data/<int:data_type_id>/<int:record_id>', methods=['GET'])
+@login_required
+
+
+def get_data_record(data_type_id, record_id):
+    """Получение одной записи данных."""
+    
+    if not db.has_permission(session['user_id'], data_type_id, 'read'):
+        return jsonify({'error': 'Недостаточно прав для просмотра данных'}), 403
+
+    try:
+        record = db.get_data_record(data_type_id, record_id)
+        if not record:
+            return jsonify({'error': 'Запись не найдена'}), 404
+        return jsonify(record)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+
+@app.route('/api/data/<int:data_type_id>/<int:record_id>', methods=['PUT'])
+@admin_required
+
+
+def update_data_record(data_type_id, record_id):
+    """Обновление записи данных (только для администраторов)."""
+    
+    if not db.has_permission(session['user_id'], data_type_id, 'admin'):
+        return jsonify({'error': 'Недостаточно прав для редактирования данных'}), 403
+
+    data = request.get_json()
+
+    try:
+        
+        fields = db.get_data_fields(data_type_id)
+        for field in fields:
+            if field['field_type'] == 'coordinates':
+                field_name = field['field_name']
+                if field_name in data:
+                    coords = data[field_name]
+                    
+                    if isinstance(coords, dict):
+                        lat = coords.get('latitude')
+                        lng = coords.get('longitude')
+                        if lat is not None and (lat < -90 or lat > 90):
+                            return jsonify({'error': f'Широта должна быть от -90 до 90 градусов (получено: {lat})'}), 400
+                        if lng is not None and (lng < -180 or lng > 180):
+                            return jsonify({'error': f'Долгота должна быть от -180 до 180 градусов (получено: {lng})'}), 400
+                        
+                        data[field_name] = json.dumps(coords) if (lat is not None or lng is not None) else None
+                    elif isinstance(coords, str):
+                        
+                        try:
+                            coords_dict = json.loads(coords)
+                            lat = coords_dict.get('latitude')
+                            lng = coords_dict.get('longitude')
+                            if lat is not None and (lat < -90 or lat > 90):
+                                return jsonify({
+                                    'error': 'Широта должна быть от -90 до 90 градусов'
+                                }), 400
+                            if lng is not None and (lng < -180 or lng > 180):
+                                return jsonify({
+                                    'error': 'Долгота должна быть от -180 до 180 градусов'
+                                }), 400
+                        except (json.JSONDecodeError, ValueError):
+                            return jsonify({'error': 'Неверный формат координат'}), 400
+        
+        db.update_data_record(data_type_id, record_id, data)
+        return jsonify({
+            'message': 'Запись обновлена'
+        })
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
+@app.route('/api/data/<int:data_type_id>/<int:record_id>', methods=['DELETE'])
+@admin_required
+
+
+def delete_data_record(data_type_id, record_id):
+    """Удаление записи данных (только для администраторов)."""
+    
+    if not db.has_permission(session['user_id'], data_type_id, 'admin'):
+        return jsonify({'error': 'Недостаточно прав для удаления данных'}), 403
+
+    try:
+        db.delete_data_record(data_type_id, record_id)
+        return jsonify({
+            'message': 'Запись удалена'
+        })
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
 @app.route('/api/data/<int:data_type_id>/statistics', methods=['GET'])
 @login_required
 
 
 def get_data_statistics(data_type_id):
     """Получение статистики по данным."""
-    # Проверяем права на чтение
+    
     if not db.has_permission(session['user_id'], data_type_id, 'read'):
         return jsonify({'error': 'Недостаточно прав для просмотра статистики'}), 403
 
     stats = db.get_data_statistics(data_type_id)
     return jsonify(stats)
 
-# API для управления пользователями (только для администраторов)
+
 
 
 @app.route('/api/users', methods=['GET'])
@@ -470,17 +677,17 @@ def delete_user(user_id):
         with sqlite3.connect(db.db_path) as conn:
             cursor = conn.cursor()
 
-            # Проверяем, что пользователь существует
+            
             cursor.execute("SELECT username FROM users WHERE id = ?", (user_id,))
             user = cursor.fetchone()
             if not user:
                 return jsonify({'error': 'Пользователь не найден'}), 404
 
-            # Нельзя удалить самого себя
+            
             if user_id == session['user_id']:
                 return jsonify({'error': 'Нельзя удалить собственный аккаунт'}), 400
 
-            # Удаляем пользователя
+            
             cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
             conn.commit()
 
@@ -502,7 +709,7 @@ def reset_user_password(user_id):
     import string
 
     try:
-        # Генерируем новый пароль
+        
         new_password = ''.join(random.choices(
             string.ascii_letters + string.digits, k=8
         ))
@@ -517,7 +724,7 @@ def reset_user_password(user_id):
             ''', (password_hash, user_id))
             conn.commit()
 
-            # Получаем имя пользователя
+            
             cursor.execute('SELECT username FROM users WHERE id = ?', (user_id,))
             result = cursor.fetchone()
             username = result[0] if result else 'unknown'
@@ -530,7 +737,7 @@ def reset_user_password(user_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
-# API для управления разрешениями
+
 
 
 @app.route('/api/users/<int:user_id>/permissions', methods=['GET'])
@@ -591,73 +798,103 @@ def revoke_permission(user_id, data_type_id):
 
 def export_data_to_csv(data_type_id):
     """Экспорт данных в CSV формат."""
-    # Проверяем права на чтение
+    
     if not db.has_permission(session['user_id'], data_type_id, 'read'):
         return jsonify({'error': 'Недостаточно прав для экспорта данных'}), 403
 
     try:
         data = request.get_json()
-        # Количество записей для экспорта
+        
         limit = data.get('limit', 100)
-        # Заголовки
+        
         include_headers = data.get('include_headers', True)
-        # Описания
+        
         include_descriptions = data.get('include_descriptions', False)
+        
+        selected_fields = data.get('selected_fields', None)
 
-        # Получаем информацию о типе данных
+        
         data_type = db.get_data_type(data_type_id)
         if not data_type:
             return jsonify({'error': 'Тип данных не найден'}), 404
 
-        # Получаем поля данных
-        fields = db.get_data_fields(data_type_id)
-        if not fields:
+        
+        all_fields = db.get_data_fields(data_type_id)
+        if not all_fields:
             return jsonify({'error': 'У типа данных нет полей'}), 400
 
-        # Получаем записи данных
+        
+        if selected_fields and len(selected_fields) > 0:
+            
+            selected_fields_set = set(selected_fields)
+            fields = [f for f in all_fields if f['field_name'] in selected_fields_set]
+            
+            field_order = {name: idx for idx, name in enumerate(selected_fields)}
+            fields.sort(key=lambda f: field_order.get(f['field_name'], 999))
+        else:
+            fields = all_fields
+
+        
         records = db.get_data_records(data_type_id, limit=limit, offset=0)
 
-        # Создаем CSV в памяти с UTF-8 кодировкой
+        
         output = io.StringIO()
         writer = csv.writer(output)
 
         if include_headers:
             if include_descriptions:
-                # Заголовки с описаниями
+                
                 headers = []
                 for field in fields:
                     headers.append(f"{field['field_name']} ({field['description']})")
                 writer.writerow(headers)
             else:
-                # Простые заголовки
+                
                 headers = [field['field_name'] for field in fields]
                 writer.writerow(headers)
 
-        # Записываем данные
+        
         for record in records:
             row = []
             for field in fields:
                 value = record.get(field['field_name'], '')
-                # Форматируем значение
+                
                 if value is None:
                     row.append('')
                 elif field['field_type'] == 'boolean':
                     row.append('Да' if value else 'Нет')
+                elif field['field_type'] == 'coordinates':
+                    
+                    if isinstance(value, dict):
+                        lat = value.get('latitude', '—')
+                        lng = value.get('longitude', '—')
+                        row.append(f"({lat}, {lng})")
+                    elif isinstance(value, str):
+                        try:
+                            import json
+                            coords = json.loads(value)
+                            lat = coords.get('latitude', '—')
+                            lng = coords.get('longitude', '—')
+                            row.append(f"({lat}, {lng})")
+                        except Exception:
+                            row.append(str(value))
+                    else:
+                        row.append(str(value))
                 elif field['field_type'] in ['integer', 'decimal']:
                     row.append(str(value))
                 else:
                     row.append(str(value))
             writer.writerow(row)
 
-        # Подготавливаем ответ с BOM для лучшей совместимости с Excel
+        
         output.seek(0)
         csv_data = output.getvalue()
         output.close()
 
-        # Добавляем BOM для корректного отображения UTF-8 в Excel
+        
         csv_data = '\ufeff' + csv_data
 
-        # Создаем имя файла (убираем пробелы и специальные символы)
+        
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         safe_name = data_type['name'].replace(' ', '_').replace('(', '').replace(')', '').replace(',', '').replace(' ', '_')
         filename = f"{safe_name}_{timestamp}.csv"
@@ -690,33 +927,46 @@ def export_data_to_excel(data_type_id):
         limit = data.get('limit', 100)
         include_headers = data.get('include_headers', True)
         include_descriptions = data.get('include_descriptions', False)
+        
+        selected_fields = data.get('selected_fields', None)
 
-        # Получаем информацию о типе данных
+        
         data_type = db.get_data_type(data_type_id)
         if not data_type:
             return jsonify({'error': 'Тип данных не найден'}), 404
 
-        # Получаем поля
-        fields = db.get_data_fields(data_type_id)
-        if not fields:
+        
+        all_fields = db.get_data_fields(data_type_id)
+        if not all_fields:
             return jsonify({'error': 'У типа данных нет полей'}), 400
 
-        # Получаем записи данных
-        # Если limit=0, получаем все записи
+        
+        if selected_fields and len(selected_fields) > 0:
+            
+            selected_fields_set = set(selected_fields)
+            fields = [f for f in all_fields if f['field_name'] in selected_fields_set]
+            
+            field_order = {name: idx for idx, name in enumerate(selected_fields)}
+            fields.sort(key=lambda f: field_order.get(f['field_name'], 999))
+        else:
+            fields = all_fields
+
+        
+        
         actual_limit = limit if limit > 0 else 10000
         records = db.get_data_records(data_type_id, limit=actual_limit, offset=0)
 
-        # Создаем Excel файл
+        
         wb = Workbook()
         ws = wb.active
         ws.title = "Данные"
 
-        # Стили для заголовков
+        
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
         header_alignment = Alignment(horizontal="center", vertical="center")
 
-        # Добавляем заголовки
+        
         if include_headers:
             if include_descriptions:
                 headers = []
@@ -725,14 +975,13 @@ def export_data_to_excel(data_type_id):
             else:
                 headers = [field['field_name'] for field in fields]
 
-            # Записываем заголовки
+            
             for col, header in enumerate(headers, 1):
                 cell = ws.cell(row=1, column=col, value=header)
                 cell.font = header_font
                 cell.fill = header_fill
                 cell.alignment = header_alignment
 
-        # Добавляем данные
         for row_idx, record in enumerate(records, 2):
             for col_idx, field in enumerate(fields, 1):
                 value = record.get(field['field_name'], '')
@@ -741,6 +990,22 @@ def export_data_to_excel(data_type_id):
                     cell_value = ''
                 elif field['field_type'] == 'boolean':
                     cell_value = 'Да' if value else 'Нет'
+                elif field['field_type'] == 'coordinates':
+                    if isinstance(value, dict):
+                        lat = value.get('latitude', '—')
+                        lng = value.get('longitude', '—')
+                        cell_value = f"({lat}, {lng})"
+                    elif isinstance(value, str):
+                        try:
+                            import json
+                            coords = json.loads(value)
+                            lat = coords.get('latitude', '—')
+                            lng = coords.get('longitude', '—')
+                            cell_value = f"({lat}, {lng})"
+                        except Exception:
+                            cell_value = str(value)
+                    else:
+                        cell_value = str(value)
                 elif field['field_type'] in ['integer', 'decimal']:
                     cell_value = value
                 else:
@@ -748,7 +1013,6 @@ def export_data_to_excel(data_type_id):
 
                 ws.cell(row=row_idx, column=col_idx, value=cell_value)
 
-        # Автоподбор ширины колонок
         for column in ws.columns:
             max_length = 0
             column_letter = column[0].column_letter
@@ -761,14 +1025,12 @@ def export_data_to_excel(data_type_id):
             adjusted_width = min(max_length + 2, 50)
             ws.column_dimensions[column_letter].width = adjusted_width
 
-        # Сохраняем в память
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
         excel_data = output.getvalue()
         output.close()
 
-        # Создаем имя файла
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         safe_name = data_type['name'].replace(' ', '_').replace('(', '').replace(')', '').replace(',', '').replace(' ', '_')
         filename = f"{safe_name}_{timestamp}.xlsx"
@@ -807,7 +1069,6 @@ def setup_admin():
         if len(password) < 6:
             return jsonify({'error': 'Пароль должен содержать минимум 6 символов'}), 400
 
-        # Проверяем, есть ли уже администратор
         with db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT COUNT(*) FROM users WHERE role = "admin"')
@@ -816,7 +1077,6 @@ def setup_admin():
             if admin_count > 0:
                 return jsonify({'error': 'Администратор уже настроен'}), 400
 
-            # Создаем администратора
             import hashlib
             password_hash = hashlib.sha256(password.encode()).hexdigest()
 
@@ -855,7 +1115,6 @@ def check_admin_setup():
 if __name__ == '__main__':
     print("Запуск сервера...")
     
-    # Проверяем, есть ли администратор
     try:
         with db.get_connection() as conn:
             cursor = conn.cursor()

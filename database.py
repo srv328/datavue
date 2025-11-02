@@ -110,44 +110,59 @@ class DatabaseManager:
             ''')
             table_exists = cursor.fetchone()
             
+            # Проверяем, нужно ли обновить constraint для добавления 'enum' и 'coordinates'
+            has_full_constraint = False
+            
             if table_exists:
-                # Если таблица существует, пересоздаем её с новым constraint
-                # Сначала создаем новую таблицу с новым constraint
-                cursor.execute('''
-                    CREATE TABLE data_fields_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        data_type_id INTEGER NOT NULL,
-                        field_name TEXT NOT NULL,
-                        field_type TEXT NOT NULL CHECK (field_type IN ('text', 'integer', 'decimal', 'date', 'boolean')),
-                        is_required BOOLEAN DEFAULT 0,
-                        description TEXT,
-                        validation_rules TEXT,
-                        created_at TIMESTAMP,
-                        FOREIGN KEY (data_type_id) REFERENCES data_types (id),
-                        UNIQUE(data_type_id, field_name)
-                    )
-                ''')
+                # Проверяем текущий constraint через sqlite_master
+                cursor.execute("""
+                    SELECT sql FROM sqlite_master 
+                    WHERE type='table' AND name='data_fields'
+                """)
+                create_sql = cursor.fetchone()
+                if create_sql:
+                    sql_lower = create_sql[0].lower()
+                    # Проверяем наличие обоих типов: enum и coordinates
+                    if 'enum' in sql_lower and 'coordinates' in sql_lower:
+                        has_full_constraint = True
                 
-                # Копируем данные, обновляя 'number' на 'decimal'
-                cursor.execute('''
-                    INSERT INTO data_fields_new 
-                    SELECT 
-                        id,
-                        data_type_id,
-                        field_name,
-                        CASE 
-                            WHEN field_type = 'number' THEN 'decimal'
-                            ELSE field_type
-                        END as field_type,
-                        is_required,
-                        description,
-                        validation_rules,
-                        created_at
-                    FROM data_fields
-                ''')
-                
-                cursor.execute('DROP TABLE data_fields')
-                cursor.execute('ALTER TABLE data_fields_new RENAME TO data_fields')
+                if not has_full_constraint:
+                    # Если таблица существует, пересоздаем её с новым constraint
+                    cursor.execute('''
+                        CREATE TABLE data_fields_new (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            data_type_id INTEGER NOT NULL,
+                            field_name TEXT NOT NULL,
+                            field_type TEXT NOT NULL CHECK (field_type IN ('text', 'integer', 'decimal', 'date', 'boolean', 'enum', 'coordinates')),
+                            is_required BOOLEAN DEFAULT 0,
+                            description TEXT,
+                            validation_rules TEXT,
+                            created_at TIMESTAMP,
+                            FOREIGN KEY (data_type_id) REFERENCES data_types (id),
+                            UNIQUE(data_type_id, field_name)
+                        )
+                    ''')
+                    
+                    # Копируем данные, обновляя 'number' на 'decimal'
+                    cursor.execute('''
+                        INSERT INTO data_fields_new 
+                        SELECT 
+                            id,
+                            data_type_id,
+                            field_name,
+                            CASE 
+                                WHEN field_type = 'number' THEN 'decimal'
+                                ELSE field_type
+                            END as field_type,
+                            is_required,
+                            description,
+                            validation_rules,
+                            created_at
+                        FROM data_fields
+                    ''')
+                    
+                    cursor.execute('DROP TABLE data_fields')
+                    cursor.execute('ALTER TABLE data_fields_new RENAME TO data_fields')
             else:
                 # Если таблица не существует, создаем с новым constraint
                 cursor.execute('''
@@ -155,7 +170,7 @@ class DatabaseManager:
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         data_type_id INTEGER NOT NULL,
                         field_name TEXT NOT NULL,
-                        field_type TEXT NOT NULL CHECK (field_type IN ('text', 'integer', 'decimal', 'date', 'boolean')),
+                        field_type TEXT NOT NULL CHECK (field_type IN ('text', 'integer', 'decimal', 'date', 'boolean', 'enum', 'coordinates')),
                         is_required BOOLEAN DEFAULT 0,
                         description TEXT,
                         validation_rules TEXT,
@@ -164,6 +179,19 @@ class DatabaseManager:
                         UNIQUE(data_type_id, field_name)
                     )
                 ''')
+            
+            # Создаем таблицу для хранения значений enum справочника
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS enum_field_values (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    field_id INTEGER NOT NULL,
+                    value TEXT NOT NULL,
+                    display_order INTEGER DEFAULT 0,
+                    created_at TIMESTAMP,
+                    FOREIGN KEY (field_id) REFERENCES data_fields (id) ON DELETE CASCADE,
+                    UNIQUE(field_id, value)
+                )
+            ''')
             
             # Таблица разрешений пользователей на справочники
             cursor.execute('''
@@ -359,7 +387,9 @@ class DatabaseManager:
             'integer': 'INTEGER',
             'decimal': 'REAL',
             'date': 'TIMESTAMP',
-            'boolean': 'BOOLEAN'
+            'boolean': 'BOOLEAN',
+            'enum': 'TEXT',  # Enum хранится как текст
+            'coordinates': 'TEXT'  # Coordinates хранятся как JSON строка
         }
         return type_mapping.get(field_type, 'TEXT')
     
@@ -375,6 +405,54 @@ class DatabaseManager:
             try:
                 with self.get_connection(timeout=30.0) as conn:
                     cursor = conn.cursor()
+                    
+                    # Проверяем и обновляем constraint если нужно
+                    cursor.execute("""
+                        SELECT sql FROM sqlite_master 
+                        WHERE type='table' AND name='data_fields'
+                    """)
+                    create_sql = cursor.fetchone()
+                    if create_sql:
+                        sql_lower = create_sql[0].lower()
+                        # Если constraint не содержит 'coordinates', пересоздаем таблицу
+                        if 'coordinates' not in sql_lower:
+                            # Пересоздаем таблицу с полным constraint
+                            cursor.execute('''
+                                CREATE TABLE data_fields_temp (
+                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    data_type_id INTEGER NOT NULL,
+                                    field_name TEXT NOT NULL,
+                                    field_type TEXT NOT NULL CHECK (field_type IN ('text', 'integer', 'decimal', 'date', 'boolean', 'enum', 'coordinates')),
+                                    is_required BOOLEAN DEFAULT 0,
+                                    description TEXT,
+                                    validation_rules TEXT,
+                                    created_at TIMESTAMP,
+                                    FOREIGN KEY (data_type_id) REFERENCES data_types (id),
+                                    UNIQUE(data_type_id, field_name)
+                                )
+                            ''')
+                            
+                            # Копируем данные
+                            cursor.execute('''
+                                INSERT INTO data_fields_temp 
+                                SELECT 
+                                    id,
+                                    data_type_id,
+                                    field_name,
+                                    CASE 
+                                        WHEN field_type = 'number' THEN 'decimal'
+                                        ELSE field_type
+                                    END as field_type,
+                                    is_required,
+                                    description,
+                                    validation_rules,
+                                    created_at
+                                FROM data_fields
+                            ''')
+                            
+                            cursor.execute('DROP TABLE data_fields')
+                            cursor.execute('ALTER TABLE data_fields_temp RENAME TO data_fields')
+                            conn.commit()
                     
                     # Проверяем, существует ли уже поле с таким именем
                     cursor.execute('''
@@ -425,6 +503,12 @@ class DatabaseManager:
                     field = cursor.fetchone()
                     if not field:
                         raise ValueError("Поле не найдено")
+                    
+                    # Удаляем enum значения, если поле типа enum
+                    cursor.execute('SELECT field_type FROM data_fields WHERE id = ?', (field_id,))
+                    field_type_result = cursor.fetchone()
+                    if field_type_result and field_type_result[0] == 'enum':
+                        cursor.execute('DELETE FROM enum_field_values WHERE field_id = ?', (field_id,))
                     
                     # Удаляем поле
                     cursor.execute('''
@@ -504,6 +588,24 @@ class DatabaseManager:
         """Пересоздание таблицы данных с учетом новых полей с использованием существующего курсора"""
         table_name = f"data_{data_type_id}"
         
+        # Проверяем, существует ли таблица, и если да, сохраняем данные
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
+        table_exists = cursor.fetchone()
+        
+        old_data = []
+        old_column_names = []
+        if table_exists:
+            # Получаем все данные из старой таблицы
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            old_columns = cursor.fetchall()
+            old_column_names = [col[1] for col in old_columns if col[1] not in ['id', 'created_by', 'created_at']]
+            
+            if old_column_names:
+                # Сохраняем все данные
+                columns_to_select = ['id', 'created_by', 'created_at'] + old_column_names
+                cursor.execute(f"SELECT {', '.join(columns_to_select)} FROM {table_name}")
+                old_data = cursor.fetchall()
+        
         # Получаем текущие поля
         cursor.execute('''
             SELECT field_name, field_type
@@ -545,6 +647,41 @@ class DatabaseManager:
             '''
         
         cursor.execute(create_sql)
+        
+        # Восстанавливаем данные, если они были
+        if old_data:
+            # Получаем список полей в новой таблице
+            new_field_names = [field[0] for field in fields] if fields else []
+            
+            # Формируем запрос для вставки
+            all_fields = ['id', 'created_by', 'created_at'] + new_field_names
+            placeholders = ['?' for _ in all_fields]
+            
+            # Для каждой старой записи создаем новую запись
+            for row in old_data:
+                # Создаем словарь из старой записи
+                old_record = dict(zip(['id', 'created_by', 'created_at'] + old_column_names, row))
+                
+                # Формируем новую запись
+                new_values = []
+                new_values.append(old_record.get('id'))
+                new_values.append(old_record.get('created_by'))
+                new_values.append(old_record.get('created_at'))
+                
+                # Добавляем значения для новых полей
+                for field_name in new_field_names:
+                    if field_name in old_record:
+                        new_values.append(old_record[field_name])
+                    else:
+                        # Новое поле - значение NULL
+                        new_values.append(None)
+                
+                # Вставляем запись
+                insert_sql = f'''
+                    INSERT INTO {table_name} ({', '.join(all_fields)})
+                    VALUES ({', '.join(placeholders)})
+                '''
+                cursor.execute(insert_sql, new_values)
     
     def get_user_permissions(self, user_id: int) -> List[Dict[str, Any]]:
         """Получение прав доступа пользователя"""
@@ -685,14 +822,60 @@ class DatabaseManager:
             ''', (data_type_id,))
             
             results = cursor.fetchall()
-            return [{
-                'id': row[0],
-                'field_name': row[1],
-                'field_type': row[2],
-                'is_required': row[3],
-                'description': row[4],
-                'validation_rules': row[5]
-            } for row in results]
+            fields = []
+            for row in results:
+                field = {
+                    'id': row[0],
+                    'field_name': row[1],
+                    'field_type': row[2],
+                    'is_required': row[3],
+                    'description': row[4],
+                    'validation_rules': row[5]
+                }
+                # Если поле типа enum, получаем его значения
+                if field['field_type'] == 'enum':
+                    field['enum_values'] = self.get_enum_values(row[0])
+                fields.append(field)
+            return fields
+    
+    def add_enum_values(self, field_id: int, values: List[str]):
+        """Добавление значений для enum поля"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            current_time = self.get_current_timestamp()
+            
+            # Удаляем старые значения
+            cursor.execute('DELETE FROM enum_field_values WHERE field_id = ?', (field_id,))
+            
+            # Добавляем новые значения
+            for order, value in enumerate(values):
+                if value and value.strip():  # Пропускаем пустые значения
+                    cursor.execute('''
+                        INSERT INTO enum_field_values (field_id, value, display_order, created_at)
+                        VALUES (?, ?, ?, ?)
+                    ''', (field_id, value.strip(), order, current_time))
+            
+            conn.commit()
+    
+    def get_enum_values(self, field_id: int) -> List[str]:
+        """Получение значений для enum поля"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT value FROM enum_field_values
+                WHERE field_id = ?
+                ORDER BY display_order, value
+            ''', (field_id,))
+            
+            results = cursor.fetchall()
+            return [row[0] for row in results]
+    
+    def delete_enum_values(self, field_id: int):
+        """Удаление всех значений enum поля (вызывается при удалении поля)"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM enum_field_values WHERE field_id = ?', (field_id,))
+            conn.commit()
     
     def has_data_fields(self, data_type_id: int) -> bool:
         """Проверка наличия полей у типа данных"""
@@ -742,6 +925,105 @@ class DatabaseManager:
             conn.commit()
             return record_id
     
+    def get_data_record(self, data_type_id: int, record_id: int) -> Optional[Dict[str, Any]]:
+        """Получение одной записи данных по ID"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            table_name = f"data_{data_type_id}"
+            
+            # Проверяем, существует ли таблица
+            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
+            table_exists = cursor.fetchone()
+            
+            if not table_exists:
+                return None
+            
+            cursor.execute(f'''
+                SELECT * FROM {table_name}
+                WHERE id = ?
+            ''', (record_id,))
+            
+            # Получаем названия колонок
+            column_names = [description[0] for description in cursor.description]
+            
+            row = cursor.fetchone()
+            if not row:
+                return None
+            
+            record = dict(zip(column_names, row))
+            
+            # Форматируем время создания если оно есть
+            if 'created_at' in record:
+                record['created_at'] = self.format_datetime(record['created_at'])
+            
+            # Парсим координаты из JSON строки обратно в объект
+            import json
+            fields = self.get_data_fields(data_type_id)
+            for field in fields:
+                if field['field_type'] == 'coordinates':
+                    field_name = field['field_name']
+                    if field_name in record and record[field_name]:
+                        try:
+                            record[field_name] = json.loads(record[field_name])
+                        except (json.JSONDecodeError, TypeError):
+                            # Если не удалось распарсить, оставляем как есть
+                            pass
+            
+            return record
+    
+    def update_data_record(self, data_type_id: int, record_id: int, data: Dict[str, Any]) -> bool:
+        """Обновление записи данных"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            table_name = f"data_{data_type_id}"
+            
+            # Проверяем, существует ли запись
+            cursor.execute(f"SELECT id FROM {table_name} WHERE id = ?", (record_id,))
+            if not cursor.fetchone():
+                raise ValueError("Запись не найдена")
+            
+            # Подготавливаем данные для обновления (исключаем служебные поля)
+            update_fields = []
+            update_values = []
+            
+            for key, value in data.items():
+                if key not in ['id', 'created_by', 'created_at']:  # Не обновляем служебные поля
+                    update_fields.append(f"{key} = ?")
+                    update_values.append(value)
+            
+            if not update_fields:
+                raise ValueError("Нет полей для обновления")
+            
+            update_values.append(record_id)
+            
+            update_sql = f'''
+                UPDATE {table_name}
+                SET {', '.join(update_fields)}
+                WHERE id = ?
+            '''
+            
+            cursor.execute(update_sql, update_values)
+            conn.commit()
+            return True
+    
+    def delete_data_record(self, data_type_id: int, record_id: int) -> bool:
+        """Удаление записи данных"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            table_name = f"data_{data_type_id}"
+            
+            # Проверяем, существует ли запись
+            cursor.execute(f"SELECT id FROM {table_name} WHERE id = ?", (record_id,))
+            if not cursor.fetchone():
+                raise ValueError("Запись не найдена")
+            
+            cursor.execute(f"DELETE FROM {table_name} WHERE id = ?", (record_id,))
+            conn.commit()
+            return True
+    
     def get_data_records(self, data_type_id: int, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Получение записей данных с информацией о пользователе"""
         with self.get_connection() as conn:
@@ -779,11 +1061,25 @@ class DatabaseManager:
             
             results = cursor.fetchall()
             records = []
+            # Получаем поля для парсинга координат
+            import json
+            fields = self.get_data_fields(data_type_id)
+            
             for row in results:
                 record = dict(zip(column_names, row))
                 # Форматируем время создания если оно есть
                 if 'created_at' in record:
                     record['created_at'] = self.format_datetime(record['created_at'])
+                # Парсим координаты из JSON строки обратно в объект
+                for field in fields:
+                    if field['field_type'] == 'coordinates':
+                        field_name = field['field_name']
+                        if field_name in record and record[field_name]:
+                            try:
+                                record[field_name] = json.loads(record[field_name])
+                            except (json.JSONDecodeError, TypeError):
+                                # Если не удалось распарсить, оставляем как есть
+                                pass
                 records.append(record)
             return records
     
