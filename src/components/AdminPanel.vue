@@ -145,6 +145,7 @@
               </label>
               <select
                 v-model="newField.field_type"
+                @change="onFieldTypeChange"
                 required
                 class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
               >
@@ -153,6 +154,8 @@
                 <option value="decimal">Десятичное число</option>
                 <option value="date">Дата</option>
                 <option value="boolean">Да/Нет</option>
+                <option value="enum">Перечислимое значение</option>
+                <option value="coordinates">Координаты</option>
               </select>
             </div>
             
@@ -180,6 +183,22 @@
                 </span>
               </label>
             </div>
+          </div>
+          
+          <!-- Поле для ввода значений enum -->
+          <div v-if="newField.field_type === 'enum'" class="mt-4 p-4 bg-blue-50 dark:bg-blue-900 rounded-lg border border-blue-200 dark:border-blue-700">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Значения справочника (по одному на строку)
+            </label>
+            <textarea
+              v-model="newField.enum_values_text"
+              rows="5"
+              placeholder="Например:&#10;Значение 1&#10;Значение 2&#10;Значение 3"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+            ></textarea>
+            <p class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+              Введите возможные значения для перечислимого поля, каждое значение на новой строке
+            </p>
           </div>
           
           <button
@@ -214,6 +233,9 @@
               </span>
               <p v-if="field.description" class="text-sm text-gray-600 dark:text-gray-400">
                 {{ field.description }}
+              </p>
+              <p v-if="field.field_type === 'enum' && field.enum_values && field.enum_values.length > 0" class="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                Значения: {{ field.enum_values.join(', ') }}
               </p>
             </div>
             
@@ -399,7 +421,7 @@
         </div>
         
         <div v-else class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" style="min-width: 800px;">
+          <table class="w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead class="bg-gray-50 dark:bg-gray-700">
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -687,7 +709,8 @@ export default {
       field_name: '',
       field_type: 'text',
       description: '',
-      is_required: false
+      is_required: false,
+      enum_values_text: ''
     })
     
     const newUser = ref({
@@ -803,13 +826,38 @@ export default {
     const addField = async () => {
       loading.value = true
       try {
+        // Подготавливаем данные для отправки
+        const fieldData = {
+          field_name: newField.value.field_name,
+          field_type: newField.value.field_type,
+          description: newField.value.description,
+          is_required: newField.value.is_required
+        }
+        
+        // Если тип enum, добавляем значения справочника
+        if (newField.value.field_type === 'enum') {
+          // Разбиваем текст на массив значений, убирая пустые строки
+          const enumValues = newField.value.enum_values_text
+            .split('\n')
+            .map(v => v.trim())
+            .filter(v => v.length > 0)
+          
+          if (enumValues.length === 0) {
+            window.$notify?.error('Ошибка', 'Для перечислимого поля необходимо указать хотя бы одно значение')
+            loading.value = false
+            return
+          }
+          
+          fieldData.enum_values = enumValues
+        }
+        
         const response = await fetch(`http://localhost:5000/api/data-types/${selectedDataTypeForFields.value.id}/fields`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           credentials: 'include',
-          body: JSON.stringify(newField.value)
+          body: JSON.stringify(fieldData)
         })
         
         if (response.ok) {
@@ -817,7 +865,8 @@ export default {
             field_name: '',
             field_type: 'text',
             description: '',
-            is_required: false
+            is_required: false,
+            enum_values_text: ''
           }
           await loadDataFields(selectedDataTypeForFields.value.id)
         } else {
@@ -829,6 +878,13 @@ export default {
         window.$notify?.error('Ошибка соединения', 'Не удалось подключиться к серверу')
       } finally {
         loading.value = false
+      }
+    }
+    
+    const onFieldTypeChange = () => {
+      // Сбрасываем значения enum при смене типа поля
+      if (newField.value.field_type !== 'enum') {
+        newField.value.enum_values_text = ''
       }
     }
     
@@ -1164,7 +1220,9 @@ export default {
         'integer': 'Целое число',
         'decimal': 'Десятичное число',
         'date': 'Дата',
-        'boolean': 'Да/Нет'
+        'boolean': 'Да/Нет',
+        'enum': 'Перечислимое значение',
+        'coordinates': 'Координаты'
       }
       return types[fieldType] || fieldType
     }
@@ -1317,7 +1375,8 @@ export default {
       getUserPermission,
       getSelectedUserName,
       formatDate,
-      getFieldTypeName
+      getFieldTypeName,
+      onFieldTypeChange
     }
   }
 }

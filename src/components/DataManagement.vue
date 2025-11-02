@@ -170,6 +170,62 @@
                 <option value="true">Да</option>
                 <option value="false">Нет</option>
               </select>
+              
+              <!-- Перечислимое значение (enum) -->
+              <select
+                v-else-if="field.field_type === 'enum'"
+                v-model="newRecord[field.field_name]"
+                :required="field.is_required"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+              >
+                <option value="" selected disabled>Выберите значение</option>
+                <option
+                  v-for="enumValue in field.enum_values || []"
+                  :key="enumValue"
+                  :value="enumValue"
+                >
+                  {{ enumValue }}
+                </option>
+              </select>
+              
+              <!-- Координаты -->
+              <div v-else-if="field.field_type === 'coordinates'" class="space-y-2">
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                      Широта (latitude)
+                    </label>
+                    <input
+                      v-model.number="newRecord[field.field_name + '_latitude']"
+                      type="number"
+                      step="any"
+                      min="-90"
+                      max="90"
+                      :required="field.is_required"
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="55.7558"
+                    >
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                      Долгота (longitude)
+                    </label>
+                    <input
+                      v-model.number="newRecord[field.field_name + '_longitude']"
+                      type="number"
+                      step="any"
+                      min="-180"
+                      max="180"
+                      :required="field.is_required"
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="37.6173"
+                    >
+                  </div>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  Широта: от -90° до 90°, Долгота: от -180° до 180°
+                </p>
+              </div>
             </div>
           </div>
           
@@ -232,6 +288,9 @@
                 <th v-if="currentUser?.role === 'admin'" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Добавил
                 </th>
+                <th v-if="currentUser?.role === 'admin'" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Действия
+                </th>
               </tr>
             </thead>
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -257,6 +316,28 @@
                     <span v-if="record.created_by_full_name" class="text-xs text-gray-500 dark:text-gray-400">
                       {{ record.created_by_full_name }}
                     </span>
+                  </div>
+                </td>
+                <td v-if="currentUser?.role === 'admin'" class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                  <div class="flex space-x-2">
+                    <button
+                      @click="editRecord(record)"
+                      class="p-1 text-blue-400 hover:text-blue-600 dark:hover:text-blue-300"
+                      title="Редактировать запись"
+                    >
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                      </svg>
+                    </button>
+                    <button
+                      @click="confirmDeleteRecord(record)"
+                      class="p-1 text-red-400 hover:text-red-600 dark:hover:text-red-300"
+                      title="Удалить запись"
+                    >
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                      </svg>
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -365,6 +446,162 @@
         </div>
       </div>
     </div>
+
+    <!-- Модальное окно редактирования записи -->
+    <div v-if="editingRecord" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" @click.self="closeEditModal">
+      <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-medium text-gray-900 dark:text-white">
+            Редактирование записи
+          </h3>
+          <button
+            @click="closeEditModal"
+            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        
+        <form @submit.prevent="saveEditedRecord" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div v-for="field in dataFields" :key="field.id">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {{ field.field_name }}
+                <span v-if="field.is_required" class="text-red-500">*</span>
+              </label>
+              
+              <!-- Текстовое поле -->
+              <input
+                v-if="field.field_type === 'text'"
+                v-model="editedRecord[field.field_name]"
+                type="text"
+                :required="field.is_required"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                :placeholder="field.description"
+              >
+              
+              <!-- Целое число -->
+              <input
+                v-else-if="field.field_type === 'integer'"
+                v-model.number="editedRecord[field.field_name]"
+                type="number"
+                step="1"
+                :required="field.is_required"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                :placeholder="field.description"
+              >
+              
+              <!-- Десятичное число -->
+              <input
+                v-else-if="field.field_type === 'decimal'"
+                v-model.number="editedRecord[field.field_name]"
+                type="number"
+                step="any"
+                :required="field.is_required"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                :placeholder="field.description"
+              >
+              
+              <!-- Дата -->
+              <input
+                v-else-if="field.field_type === 'date'"
+                v-model="editedRecord[field.field_name]"
+                type="date"
+                :required="field.is_required"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+              >
+              
+              <!-- Булево поле -->
+              <select
+                v-else-if="field.field_type === 'boolean'"
+                v-model="editedRecord[field.field_name]"
+                :required="field.is_required"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+              >
+                <option :value="null">Не выбрано</option>
+                <option :value="true">Да</option>
+                <option :value="false">Нет</option>
+              </select>
+              
+              <!-- Перечислимое значение (enum) -->
+              <select
+                v-else-if="field.field_type === 'enum'"
+                v-model="editedRecord[field.field_name]"
+                :required="field.is_required"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+              >
+                <option :value="null">Не выбрано</option>
+                <option
+                  v-for="enumValue in field.enum_values || []"
+                  :key="enumValue"
+                  :value="enumValue"
+                >
+                  {{ enumValue }}
+                </option>
+              </select>
+              
+              <!-- Координаты -->
+              <div v-else-if="field.field_type === 'coordinates'" class="space-y-2">
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                      Широта (latitude)
+                    </label>
+                    <input
+                      v-model.number="editedRecord[field.field_name + '_latitude']"
+                      type="number"
+                      step="any"
+                      min="-90"
+                      max="90"
+                      :required="field.is_required"
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="55.7558"
+                    >
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                      Долгота (longitude)
+                    </label>
+                    <input
+                      v-model.number="editedRecord[field.field_name + '_longitude']"
+                      type="number"
+                      step="any"
+                      min="-180"
+                      max="180"
+                      :required="field.is_required"
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                      placeholder="37.6173"
+                    >
+                  </div>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  Широта: от -90° до 90°, Долгота: от -180° до 180°
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-600">
+            <button
+              type="button"
+              @click="closeEditModal"
+              class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              :disabled="loading"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {{ loading ? 'Сохранение...' : 'Сохранить изменения' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -383,6 +620,8 @@ export default {
     const newRecord = ref({})
     const hasFields = ref(false)
     const currentUser = ref(null)
+    const editingRecord = ref(null)
+    const editedRecord = ref({})
     
     // Пагинация и сортировка
     const recordsPerPage = ref(20)
@@ -527,6 +766,12 @@ export default {
       newRecord.value = {}
       
       await loadDataFields(dataType.id)
+      // Инициализируем enum поля пустой строкой для показа "Выберите значение"
+      dataFields.value.forEach(field => {
+        if (field.field_type === 'enum') {
+          newRecord.value[field.field_name] = ''
+        }
+      })
       await checkHasFields(dataType.id)
       await loadDataRecords(dataType.id)
       await loadStatistics(dataType.id)
@@ -540,7 +785,31 @@ export default {
         
         // Конвертируем строковые значения в нужные типы
         dataFields.value.forEach(field => {
-          if (field.field_type === 'integer' && recordData[field.field_name]) {
+          if (field.field_type === 'coordinates') {
+            // Собираем координаты из двух полей в объект
+            const latKey = field.field_name + '_latitude'
+            const lngKey = field.field_name + '_longitude'
+            const lat = recordData[latKey] !== null && recordData[latKey] !== undefined && recordData[latKey] !== '' 
+              ? parseFloat(recordData[latKey]) 
+              : null
+            const lng = recordData[lngKey] !== null && recordData[lngKey] !== undefined && recordData[lngKey] !== '' 
+              ? parseFloat(recordData[lngKey]) 
+              : null
+            
+            // Создаем объект координат (хотя бы одно значение должно быть)
+            if (lat !== null || lng !== null) {
+              recordData[field.field_name] = {
+                latitude: lat,
+                longitude: lng
+              }
+            } else {
+              recordData[field.field_name] = null
+            }
+            
+            // Удаляем временные поля
+            delete recordData[latKey]
+            delete recordData[lngKey]
+          } else if (field.field_type === 'integer' && recordData[field.field_name]) {
             recordData[field.field_name] = parseInt(recordData[field.field_name])
           } else if (field.field_type === 'decimal' && recordData[field.field_name]) {
             recordData[field.field_name] = parseFloat(recordData[field.field_name])
@@ -550,6 +819,11 @@ export default {
               recordData[field.field_name] = null
             } else {
               recordData[field.field_name] = recordData[field.field_name] === 'true'
+            }
+          } else if (field.field_type === 'enum') {
+            // Для enum полей: если не заполнено - null
+            if (recordData[field.field_name] === '' || recordData[field.field_name] === undefined) {
+              recordData[field.field_name] = null
             }
           }
         })
@@ -564,8 +838,13 @@ export default {
         })
         
         if (response.ok) {
-          // Очищаем форму
+          // Очищаем форму и инициализируем enum поля пустой строкой
           newRecord.value = {}
+          dataFields.value.forEach(field => {
+            if (field.field_type === 'enum') {
+              newRecord.value[field.field_name] = ''
+            }
+          })
           
           // Перезагружаем данные
           await loadDataRecords(selectedDataType.value.id)
@@ -598,6 +877,27 @@ export default {
         // Для boolean полей null означает "не выбрано"
         if (value === null) return '-'
         return value ? 'Да' : 'Нет'
+      } else if (fieldType === 'enum') {
+        // Для enum полей просто возвращаем значение как есть
+        return value || '-'
+      } else if (fieldType === 'coordinates') {
+        // Для координат: отображаем в формате (lat, lng)
+        if (typeof value === 'object' && value !== null) {
+          const lat = value.latitude !== null && value.latitude !== undefined ? value.latitude.toFixed(6) : '—'
+          const lng = value.longitude !== null && value.longitude !== undefined ? value.longitude.toFixed(6) : '—'
+          return `(${lat}, ${lng})`
+        } else if (typeof value === 'string') {
+          // Если пришло как строка, пытаемся распарсить
+          try {
+            const coords = JSON.parse(value)
+            const lat = coords.latitude !== null && coords.latitude !== undefined ? parseFloat(coords.latitude).toFixed(6) : '—'
+            const lng = coords.longitude !== null && coords.longitude !== undefined ? parseFloat(coords.longitude).toFixed(6) : '—'
+            return `(${lat}, ${lng})`
+          } catch (e) {
+            return value
+          }
+        }
+        return '-'
       } else if (fieldType === 'integer') {
         return typeof value === 'number' ? Math.round(value) : value
       } else if (fieldType === 'decimal') {
@@ -652,6 +952,179 @@ export default {
       goToRecordsPage(totalRecordsPages.value)
     }
     
+    const editRecord = async (record) => {
+      try {
+        // Загружаем полную информацию о записи
+        const response = await fetch(`http://localhost:5000/api/data/${selectedDataType.value.id}/${record.id}`, {
+          credentials: 'include'
+        })
+        
+        if (response.ok) {
+          const fullRecord = await response.json()
+          editingRecord.value = fullRecord
+          // Копируем только поля данных (исключаем служебные поля)
+          editedRecord.value = {}
+          dataFields.value.forEach(field => {
+            const value = fullRecord[field.field_name]
+            // Преобразуем значения для отображения в формах
+            if (field.field_type === 'coordinates') {
+              // Координаты: разделяем на два поля для редактирования
+              if (value && typeof value === 'object') {
+                editedRecord.value[field.field_name + '_latitude'] = value.latitude !== null && value.latitude !== undefined ? value.latitude : null
+                editedRecord.value[field.field_name + '_longitude'] = value.longitude !== null && value.longitude !== undefined ? value.longitude : null
+              } else if (typeof value === 'string') {
+                // Если пришло как JSON строка, парсим
+                try {
+                  const coords = JSON.parse(value)
+                  editedRecord.value[field.field_name + '_latitude'] = coords.latitude !== null && coords.latitude !== undefined ? coords.latitude : null
+                  editedRecord.value[field.field_name + '_longitude'] = coords.longitude !== null && coords.longitude !== undefined ? coords.longitude : null
+                } catch (e) {
+                  editedRecord.value[field.field_name + '_latitude'] = null
+                  editedRecord.value[field.field_name + '_longitude'] = null
+                }
+              } else {
+                editedRecord.value[field.field_name + '_latitude'] = null
+                editedRecord.value[field.field_name + '_longitude'] = null
+              }
+            } else if (field.field_type === 'boolean') {
+              editedRecord.value[field.field_name] = value === null ? null : value === true || value === 'true'
+            } else if (field.field_type === 'date' && value) {
+              // Форматируем дату для input type="date" (YYYY-MM-DD)
+              const date = new Date(value)
+              editedRecord.value[field.field_name] = date.toISOString().split('T')[0]
+            } else {
+              editedRecord.value[field.field_name] = value !== null && value !== undefined ? value : null
+            }
+          })
+        } else {
+          window.$notify?.error('Ошибка', 'Не удалось загрузить запись для редактирования')
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки записи:', err)
+        window.$notify?.error('Ошибка', 'Не удалось загрузить запись')
+      }
+    }
+    
+    const closeEditModal = () => {
+      editingRecord.value = null
+      editedRecord.value = {}
+    }
+    
+    const saveEditedRecord = async () => {
+      loading.value = true
+      try {
+        // Подготавливаем данные для отправки
+        const recordData = { ...editedRecord.value }
+        
+        // Конвертируем строковые значения в нужные типы
+        dataFields.value.forEach(field => {
+          if (field.field_type === 'coordinates') {
+            // Собираем координаты из двух полей в объект
+            const latKey = field.field_name + '_latitude'
+            const lngKey = field.field_name + '_longitude'
+            const lat = recordData[latKey] !== null && recordData[latKey] !== undefined && recordData[latKey] !== '' 
+              ? parseFloat(recordData[latKey]) 
+              : null
+            const lng = recordData[lngKey] !== null && recordData[lngKey] !== undefined && recordData[lngKey] !== '' 
+              ? parseFloat(recordData[lngKey]) 
+              : null
+            
+            // Создаем объект координат (хотя бы одно значение должно быть)
+            if (lat !== null || lng !== null) {
+              recordData[field.field_name] = {
+                latitude: lat,
+                longitude: lng
+              }
+            } else {
+              recordData[field.field_name] = null
+            }
+            
+            // Удаляем временные поля
+            delete recordData[latKey]
+            delete recordData[lngKey]
+          } else if (field.field_type === 'integer' && recordData[field.field_name] !== null && recordData[field.field_name] !== undefined) {
+            recordData[field.field_name] = parseInt(recordData[field.field_name])
+          } else if (field.field_type === 'decimal' && recordData[field.field_name] !== null && recordData[field.field_name] !== undefined) {
+            recordData[field.field_name] = parseFloat(recordData[field.field_name])
+          } else if (field.field_type === 'boolean') {
+            // Для boolean полей: если не заполнено - null, иначе конвертируем
+            if (recordData[field.field_name] === null || recordData[field.field_name] === undefined || recordData[field.field_name] === '') {
+              recordData[field.field_name] = null
+            } else {
+              recordData[field.field_name] = recordData[field.field_name] === true || recordData[field.field_name] === 'true'
+            }
+          } else if (field.field_type === 'enum') {
+            // Для enum полей: если не заполнено - null
+            if (recordData[field.field_name] === '' || recordData[field.field_name] === undefined) {
+              recordData[field.field_name] = null
+            }
+          }
+        })
+        
+        const response = await fetch(`http://localhost:5000/api/data/${selectedDataType.value.id}/${editingRecord.value.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(recordData)
+        })
+        
+        if (response.ok) {
+          closeEditModal()
+          await loadDataRecords(selectedDataType.value.id)
+          await loadStatistics(selectedDataType.value.id)
+          window.$notify?.success('Запись обновлена', 'Изменения успешно сохранены')
+        } else {
+          const error = await response.json()
+          window.$notify?.error('Ошибка обновления записи', error.error)
+        }
+      } catch (err) {
+        console.error('Ошибка обновления записи:', err)
+        window.$notify?.error('Ошибка соединения', 'Не удалось подключиться к серверу')
+      } finally {
+        loading.value = false
+      }
+    }
+    
+    const confirmDeleteRecord = async (record) => {
+      const confirmed = await window.$modal?.confirm({
+        title: 'Удаление записи',
+        message: `Вы уверены, что хотите удалить эту запись? Это действие нельзя отменить.`,
+        type: 'danger',
+        confirmText: 'Удалить',
+        cancelText: 'Отмена'
+      })
+      
+      if (!confirmed) return
+      
+      await deleteRecord(record.id)
+    }
+    
+    const deleteRecord = async (recordId) => {
+      loading.value = true
+      try {
+        const response = await fetch(`http://localhost:5000/api/data/${selectedDataType.value.id}/${recordId}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        })
+        
+        if (response.ok) {
+          await loadDataRecords(selectedDataType.value.id)
+          await loadStatistics(selectedDataType.value.id)
+          window.$notify?.success('Запись удалена', 'Запись успешно удалена из базы данных')
+        } else {
+          const error = await response.json()
+          window.$notify?.error('Ошибка удаления записи', error.error)
+        }
+      } catch (err) {
+        console.error('Ошибка удаления записи:', err)
+        window.$notify?.error('Ошибка соединения', 'Не удалось подключиться к серверу')
+      } finally {
+        loading.value = false
+      }
+    }
+    
     const getRecordsPageNumbers = () => {
       const total = totalRecordsPages.value
       const current = currentRecordsPage.value
@@ -689,9 +1162,13 @@ export default {
     const getFieldTypeName = (fieldType) => {
       const types = {
         'text': 'Текст',
+        'integer': 'Целое число',
+        'decimal': 'Десятичное число',
         'number': 'Число',
         'date': 'Дата',
-        'boolean': 'Да/Нет'
+        'boolean': 'Да/Нет',
+        'enum': 'Перечислимое значение',
+        'coordinates': 'Координаты'
       }
       return types[fieldType] || fieldType
     }
@@ -733,7 +1210,15 @@ export default {
       goToNextRecordsPage,
       goToFirstRecordsPage,
       goToLastRecordsPage,
-      getRecordsPageNumbers
+      getRecordsPageNumbers,
+      // Редактирование и удаление
+      editingRecord,
+      editedRecord,
+      editRecord,
+      closeEditModal,
+      saveEditedRecord,
+      confirmDeleteRecord,
+      deleteRecord
     }
   }
 }

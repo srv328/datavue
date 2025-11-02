@@ -63,14 +63,12 @@ export default {
     }
 
     onMounted(() => {
-      // Делаем методы доступными глобально
       window.$modal = {
         confirm: showConfirm
       }
     })
 
     onUnmounted(() => {
-      // Удаляем глобальные методы
       delete window.$modal
     })
 

@@ -79,7 +79,7 @@ export default {
     },
     type: {
       type: String,
-      default: 'warning', // warning, danger, info
+      default: 'warning', 
       validator: (value) => ['warning', 'danger', 'info'].includes(value)
     },
     confirmText: {

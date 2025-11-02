@@ -113,9 +113,7 @@ export default {
         progress: 100
       }
 
-      // Ограничиваем количество уведомлений (максимум 3)
       if (notifications.value.length >= 3) {
-        // Удаляем самое старое уведомление
         const oldest = notifications.value.shift()
         if (timers.has(oldest.id)) {
           clearInterval(timers.get(oldest.id))
@@ -136,7 +134,6 @@ export default {
         notifications.value.splice(index, 1)
       }
       
-      // Очищаем таймер
       if (timers.has(id)) {
         clearInterval(timers.get(id))
         timers.delete(id)
@@ -145,7 +142,7 @@ export default {
 
     const startAutoClose = (notification) => {
       const startTime = Date.now()
-      const updateInterval = 50 // Обновляем каждые 50мс для плавности
+      const updateInterval = 50
       
       const timer = setInterval(() => {
         const elapsed = Date.now() - startTime
@@ -165,7 +162,6 @@ export default {
       timers.set(notification.id, timer)
     }
 
-    // Глобальные методы для использования в других компонентах
     const showSuccess = (title, message = '') => {
       addNotification({ type: 'success', title, message })
     }
@@ -183,7 +179,6 @@ export default {
     }
 
     onMounted(() => {
-      // Делаем методы доступными глобально
       window.$notify = {
         success: showSuccess,
         error: showError,
@@ -193,11 +188,9 @@ export default {
     })
 
     onUnmounted(() => {
-      // Очищаем все таймеры
       timers.forEach(timer => clearInterval(timer))
       timers.clear()
       
-      // Удаляем глобальные методы
       delete window.$notify
     })
 
@@ -231,7 +224,6 @@ export default {
   transition: transform 0.3s ease;
 }
 
-/* Для очень маленьких экранов */
 @media (max-width: 320px) {
   .fixed {
     top: 0.25rem !important;
@@ -242,7 +234,6 @@ export default {
   }
 }
 
-/* Для маленьких экранов */
 @media (max-width: 480px) {
   .fixed {
     max-width: calc(100vw - 1rem) !important;
@@ -252,7 +243,6 @@ export default {
   }
 }
 
-/* Для средних экранов */
 @media (max-width: 640px) {
   .fixed {
     max-width: calc(100vw - 2rem) !important;

@@ -128,7 +128,7 @@ def load_boston_dataset_to_db():
                     record_data['crim'], record_data['zn'], record_data['indus'], record_data['chas'],
                     record_data['nox'], record_data['rm'], record_data['age'], record_data['dis'],
                     record_data['rad'], record_data['tax'], record_data['ptratio'], record_data['b'],
-                    record_data['lstat'], record_data['medv'], admin_id, db.get_current_timestamp()
+                    record_data['lstat'], record_data['medv'], 2, db.get_current_timestamp()
                 ))
                 
                 records_loaded += 1
